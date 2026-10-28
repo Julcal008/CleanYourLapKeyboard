@@ -106,6 +106,22 @@ run:
 makepkg -si
 ```
 
+### Flatpak
+
+The manifest is at `io.github.julcal008.CleanYourLapKeyboard.json`. The Flatpak
+ships only the user interface; the privileged helper must still be installed by
+the native distribution package, because a Flatpak application cannot escalate
+privileges with `pkexec`. When the interface runs inside the sandbox it asks the
+host to run that helper through `flatpak-spawn --host`.
+
+Build and install it locally with Flathub's builder:
+
+```bash
+flatpak run --command=flathub-build org.flatpak.Builder --install \
+  io.github.julcal008.CleanYourLapKeyboard.json
+flatpak run io.github.julcal008.CleanYourLapKeyboard
+```
+
 The app appears in the application menu as **Clean Your Lap Keyboard**. You can
 also launch it from a terminal:
 

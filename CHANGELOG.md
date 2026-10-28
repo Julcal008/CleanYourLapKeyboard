@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-10-28
+
+### Added
+
+- Flatpak support. The application now detects when it runs inside a Flatpak
+  sandbox and launches the privileged helper on the host through
+  `flatpak-spawn --host`, because Flatpak applications cannot escalate
+  privileges with `pkexec` themselves.
+- Export manifest `io.github.julcal008.CleanYourLapKeyboard.json` for Flathub.
+
+### Changed
+
+- The helper client now searches the native package helper location on the host
+  when sandboxed, and reports a clear error when the native package is missing.
+
 ## [0.1.2] - 2026-10-21
 
 ### Added

@@ -28,6 +28,77 @@
 
 #define STDERR_LIMIT 4096
 
+/*
+ * Candidate locations of the privileged helper as installed by the native
+ * distribution packages.  They are used only when the UI itself runs inside a
+ * Flatpak sandbox.
+ */
+static const gchar *const host_helper_candidates[] = {
+  "/usr/libexec/clean-your-lap-keyboard/cylk-helper",
+  "/usr/lib64/clean-your-lap-keyboard/cylk-helper",
+  "/usr/lib/x86_64-linux-gnu/clean-your-lap-keyboard/cylk-helper",
+  "/usr/lib/aarch64-linux-gnu/clean-your-lap-keyboard/cylk-helper",
+  NULL,
+};
+
+static gboolean
+running_in_flatpak(void)
+{
+  return g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS) ||
+         g_getenv("FLATPAK_ID") != NULL;
+}
+
+/*
+ * Flatpak apps cannot escalate privileges: pkexec is absent from the runtime and
+ * the helper under /app cannot run as root.  When sandboxed we therefore ask the
+ * host, through flatpak-spawn, to run the helper installed by the native
+ * package.  The helper then authenticates with the host's polkit policy and
+ * speaks the same line protocol over the forwarded standard streams.
+ */
+static gchar *
+find_host_helper(GError **error)
+{
+  GString *script;
+  gchar *stdout_text = NULL;
+  gint wait_status = 0;
+  gboolean ok;
+
+  script = g_string_new(NULL);
+  for (guint i = 0; host_helper_candidates[i] != NULL; i++)
+    g_string_append_printf(script,
+                           "[ -x '%s' ] && { printf '%%s' '%s'; exit 0; }; ",
+                           host_helper_candidates[i],
+                           host_helper_candidates[i]);
+  g_string_append(script, "exit 1");
+
+  {
+    const gchar *argv[] = { "flatpak-spawn", "--host", "sh", "-c",
+                            script->str, NULL };
+
+    ok = g_spawn_sync(NULL, (gchar **) argv, NULL,
+                      G_SPAWN_SEARCH_PATH | G_SPAWN_STDERR_TO_DEV_NULL,
+                      NULL, NULL, &stdout_text, NULL, &wait_status, error);
+  }
+  g_string_free(script, TRUE);
+
+  if (!ok)
+    return NULL;
+
+  if (stdout_text != NULL)
+    g_strstrip(stdout_text);
+
+  if (stdout_text != NULL && stdout_text[0] != '\0' &&
+      g_spawn_check_wait_status(wait_status, NULL))
+    return stdout_text;
+
+  g_free(stdout_text);
+  g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                      "The privileged helper is not installed on the host. "
+                      "Install the clean-your-lap-keyboard package with your "
+                      "distribution package manager and try again.");
+  return NULL;
+}
+
 struct _CylkHelper {
   GObject parent_instance;
 };
@@ -306,37 +377,64 @@ cylk_helper_start(CylkHelper *self, GError **error)
 {
   CylkHelperPrivate *priv = cylk_helper_get_instance_private(self);
   GSubprocessLauncher *launcher;
-  const gchar *argv[] = { "pkexec", HELPER_PATH, NULL };
-  gchar *pkexec;
+  const gchar *argv_native[] = { "pkexec", HELPER_PATH, NULL };
+  const gchar *argv_flatpak[] = { "flatpak-spawn", "--host", "pkexec",
+                                  NULL, NULL };
+  const gchar *const *argv;
+  gchar *host_helper = NULL;
+  gboolean flatpak;
 
   g_return_val_if_fail(CYLK_IS_HELPER(self), FALSE);
 
   if (priv->running)
     return TRUE;
 
-  pkexec = g_find_program_in_path("pkexec");
-  if (pkexec == NULL) {
-    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-                        "pkexec was not found. Install polkit and try again.");
-    return FALSE;
-  }
-  g_free(pkexec);
+  flatpak = running_in_flatpak();
 
-  if (!g_file_test(HELPER_PATH, G_FILE_TEST_IS_EXECUTABLE)) {
-    g_set_error(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-                "The helper is not installed at %s. Reinstall the package.",
-                HELPER_PATH);
-    return FALSE;
+  if (flatpak) {
+    gchar *spawn = g_find_program_in_path("flatpak-spawn");
+
+    if (spawn == NULL) {
+      g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                          "flatpak-spawn was not found. This Flatpak is "
+                          "incomplete or the sandbox is misconfigured.");
+      return FALSE;
+    }
+    g_free(spawn);
+
+    host_helper = find_host_helper(error);
+    if (host_helper == NULL)
+      return FALSE;
+
+    argv_flatpak[3] = host_helper;
+    argv = argv_flatpak;
+  } else {
+    gchar *pkexec = g_find_program_in_path("pkexec");
+
+    if (pkexec == NULL) {
+      g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                          "pkexec was not found. Install polkit and try again.");
+      return FALSE;
+    }
+    g_free(pkexec);
+
+    if (!g_file_test(HELPER_PATH, G_FILE_TEST_IS_EXECUTABLE)) {
+      g_set_error(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                  "The helper is not installed at %s. Reinstall the package.",
+                  HELPER_PATH);
+      return FALSE;
+    }
+
+    argv = argv_native;
   }
 
   launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDIN_PIPE |
                                        G_SUBPROCESS_FLAGS_STDOUT_PIPE |
                                        G_SUBPROCESS_FLAGS_STDERR_PIPE);
 
-  priv->subprocess = g_subprocess_launcher_spawnv(launcher,
-                                                  (const gchar *const *) argv,
-                                                  error);
+  priv->subprocess = g_subprocess_launcher_spawnv(launcher, argv, error);
   g_object_unref(launcher);
+  g_free(host_helper);
 
   if (priv->subprocess == NULL)
     return FALSE;

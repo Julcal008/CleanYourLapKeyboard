@@ -16,6 +16,20 @@
     <p>The application also grabs the auxiliary hotkey devices that report volume, microphone, brightness, and power button events, so those keys cannot be pressed by accident either. The touchpad and external keyboards keep working. Cleaning stops automatically after the selected time, when you press the Stop button, or when you hold Esc for two seconds. The keyboard is also released if the screen is locked, the computer suspends, or the session becomes inactive.</p>
     <p>The application does not read, log, or transmit key presses. A small privileged helper performs only the device grab and releases it immediately when asked.</p>
   </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Idle</caption>
+      <image type="source">https://raw.githubusercontent.com/Julcal008/clean-your-lap-keyboard/main/docs/screenshots/idle.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Cleaning in progress</caption>
+      <image type="source">https://raw.githubusercontent.com/Julcal008/clean-your-lap-keyboard/main/docs/screenshots/cleaning.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Done</caption>
+      <image type="source">https://raw.githubusercontent.com/Julcal008/clean-your-lap-keyboard/main/docs/screenshots/done.png</image>
+    </screenshot>
+  </screenshots>
   <categories>
     <category>Utility</category>
   </categories>
@@ -30,6 +44,11 @@
     <binary>cylk</binary>
   </provides>
   <releases>
+    <release version="0.1.3" date="2026-10-28">
+      <description>
+        <p>Flatpak support: when sandboxed, the privileged helper runs on the host through flatpak-spawn.</p>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-10-21">
       <description>
         <p>Optionally disable the built-in touchpad while cleaning, with automatic touchpad detection.</p>
