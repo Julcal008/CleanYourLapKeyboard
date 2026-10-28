@@ -27,3 +27,6 @@ debian/debhelper-build-stamp
 debian/files
 debian/*.substvars
 debian/*.debhelper.log
+/repo/
+/builddir/
+*.local.json
